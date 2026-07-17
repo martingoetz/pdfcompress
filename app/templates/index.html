@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDFCompress – PDF verkleinern</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>PDFCompress</h1>
+    <p class="subtitle">PDF hochladen, komprimierte Version herunterladen. Die Datei wird nur zur Verarbeitung genutzt und nicht gespeichert.</p>
+
+    <form id="form">
+      <div id="dropzone" tabindex="0">
+        <p id="dropzone-text">PDF hierher ziehen<br>oder klicken zum Auswählen</p>
+        <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
+      </div>
+
+      <fieldset>
+        <legend>Kompressionsstufe</legend>
+        <label><input type="radio" name="preset" value="low"> Stark <small>(kleinste Datei, 96 dpi)</small></label>
+        <label><input type="radio" name="preset" value="medium" checked> Ausgewogen <small>(120 dpi)</small></label>
+        <label><input type="radio" name="preset" value="high"> Beste Qualität <small>(150 dpi)</small></label>
+      </fieldset>
+
+      <button type="submit" id="submit-btn" disabled>Komprimieren</button>
+    </form>
+
+    <div id="status" hidden></div>
+  </main>
+
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const dropText = document.getElementById("dropzone-text");
+    const fileInput = document.getElementById("file-input");
+    const form = document.getElementById("form");
+    const submitBtn = document.getElementById("submit-btn");
+    const status = document.getElementById("status");
+    let selectedFile = null;
+
+    function formatBytes(n) {
+      if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB";
+      if (n >= 1024) return Math.round(n / 1024) + " KB";
+      return n + " B";
+    }
+
+    function setFile(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+        showStatus("Bitte eine PDF-Datei auswählen.", "error");
+        return;
+      }
+      selectedFile = file;
+      dropText.innerHTML = "<strong>" + file.name + "</strong><br>" + formatBytes(file.size);
+      submitBtn.disabled = false;
+      status.hidden = true;
+    }
+
+    function showStatus(html, cls) {
+      status.className = cls;
+      status.innerHTML = html;
+      status.hidden = false;
+    }
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
+    fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+
+    ["dragover", "dragenter"].forEach(ev =>
+      dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach(ev =>
+      dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove("dragover"); }));
+    dropzone.addEventListener("drop", e => setFile(e.dataTransfer.files[0]));
+
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (!selectedFile) return;
+
+      submitBtn.disabled = true;
+      showStatus('<span class="spinner"></span> Komprimiere …', "working");
+
+      const data = new FormData();
+      data.append("file", selectedFile);
+      data.append("preset", new FormData(form).get("preset"));
+
+      try {
+        const resp = await fetch("/compress", { method: "POST", body: data });
+        if (!resp.ok) {
+          let msg = "Fehler bei der Verarbeitung.";
+          try { msg = (await resp.json()).detail || msg; } catch {}
+          showStatus(msg, "error");
+          return;
+        }
+
+        const before = Number(resp.headers.get("X-Original-Size"));
+        const after = Number(resp.headers.get("X-Compressed-Size"));
+        const blob = await resp.blob();
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = selectedFile.name.replace(/\.pdf$/i, "") + "_komprimiert.pdf";
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        const pct = before > 0 ? Math.round((1 - after / before) * 100) : 0;
+        showStatus(
+          pct > 0
+            ? "Fertig: " + formatBytes(before) + " → " + formatBytes(after) + " (−" + pct + " %)"
+            : "Fertig – die Datei war bereits optimal komprimiert (" + formatBytes(before) + ").",
+          "success");
+      } catch {
+        showStatus("Verbindungsfehler – läuft der Server?", "error");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
