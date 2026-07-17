@@ -23,6 +23,30 @@ Dann im Browser öffnen: http://127.0.0.1:8000
 uv run pytest
 ```
 
+## Hintergrund-Autostart unter Windows
+
+Eine native Windows-Aufgabe namens `PDFCompress` startet die App beim
+Systemstart im Hintergrund. PowerShell muss dazu als Administrator im
+Projektordner geoeffnet werden:
+
+```powershell
+.\scripts\install-background-task.ps1
+```
+
+Optional kann die App fuer das lokale Netzwerk freigegeben werden:
+
+```powershell
+.\scripts\install-background-task.ps1 -BindHost 0.0.0.0 -Port 8000
+```
+
+Die Aufgabe wird beim Systemstart ausgefuehrt und ist unter
+`Aufgabenplanung > Aufgabenplanungsbibliothek > PDFCompress` sichtbar. Zum
+Entfernen:
+
+```powershell
+.\scripts\remove-background-task.ps1
+```
+
 ## Funktionsweise
 
 - Bilder im PDF werden dekodiert, auf die Ziel-Auflösung der gewählten Stufe
